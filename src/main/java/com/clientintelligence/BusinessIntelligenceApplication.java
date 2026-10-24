@@ -33,9 +33,62 @@ class AnalystController {
         .connectTimeout(Duration.ofSeconds(12)).build();
 
     @GetMapping("/api/health")
-    Map<String, Object> health() {
-        return Map.of("status", "ok", "llmConfigured",
-            System.getenv("GROQ_API_KEY") != null && !System.getenv("GROQ_API_KEY").isBlank());
+    Map<String, Object> health(@RequestParam(defaultValue = "false") boolean deep) {
+        String apiKey = System.getenv("GROQ_API_KEY");
+        boolean configured = apiKey != null && !apiKey.isBlank();
+        if (!deep) {
+            return Map.of("status", "ok", "llmConfigured", configured,
+                "llmStatus", configured ? "configured" : "not_configured", "model", MODEL);
+        }
+        if (!configured) {
+            return Map.of("status", "ok", "llmConfigured", false,
+                "llmStatus", "not_configured",
+                "message", "GROQ_API_KEY is missing from the Render service environment.");
+        }
+        try {
+            Map<String, Object> payload = Map.of(
+                "model", MODEL,
+                "temperature", 0,
+                "max_tokens", 8,
+                "messages", List.of(
+                    Map.of("role", "system", "content", "Reply with the single word OK."),
+                    Map.of("role", "user", "content", "Connection test.")
+                )
+            );
+            HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(GROQ_ENDPOINT))
+                .timeout(Duration.ofSeconds(18))
+                .header("Authorization", "Bearer " + apiKey)
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(payload)))
+                .build();
+            HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                JsonNode json = mapper.readTree(response.body());
+                String answer = json.path("choices").path(0).path("message").path("content").asText("");
+                if (!answer.isBlank()) {
+                    return Map.of("status", "ok", "llmConfigured", true,
+                        "llmStatus", "connected", "model", MODEL);
+                }
+                return Map.of("status", "ok", "llmConfigured", true,
+                    "llmStatus", "error", "model", MODEL,
+                    "message", "The provider returned an empty response.");
+            }
+            String providerMessage = mapper.readTree(response.body()).path("error").path("message")
+                .asText("Provider request failed with HTTP " + response.statusCode());
+            return Map.of("status", "ok", "llmConfigured", true,
+                "llmStatus", "error", "model", MODEL,
+                "message", safeError(providerMessage));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Map.of("status", "ok", "llmConfigured", true,
+                "llmStatus", "error", "model", MODEL,
+                "message", "The connection test was interrupted.");
+        } catch (Exception e) {
+            return Map.of("status", "ok", "llmConfigured", true,
+                "llmStatus", "error", "model", MODEL,
+                "message", "Connection test failed. Check Render logs and the configured model.");
+        }
     }
 
     @PostMapping("/api/chat")
