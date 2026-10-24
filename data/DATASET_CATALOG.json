@@ -1,0 +1,21 @@
+{
+  "project": "Business Intelligence — CIB Client Intelligence Lab",
+  "data_policy": "Synthetic-only by default",
+  "generated_by": "app.py",
+  "fields": [
+    "client_id",
+    "sector",
+    "region",
+    "annual_revenue_usd_m",
+    "relationship_tenure_years",
+    "products_held",
+    "digital_activity_score",
+    "engagement_score",
+    "leverage_proxy",
+    "adopted_simulated",
+    "estimated_wallet_gap_usd_m",
+    "treatment_assignment",
+    "simulated_campaign_outcome"
+  ],
+  "warning": "These records and metrics are synthetic and must not be represented as real banking or HSBC data."
+}
